@@ -7,19 +7,22 @@ export type Warning = {
 };
 
 export class InlineWarnings {
+  // Store all active warnings for this document
+  private warnings: Warning[] = [];
+
   private decorationType = vscode.window.createTextEditorDecorationType({
-    textDecoration: "underline wavy #ff9800", // Orange wavy underline
+    // No underline here.
+    // VS Code owns the red squiggle.
     gutterIconPath: vscode.Uri.parse(
       "data:image/svg+xml;charset=utf-8," +
-      encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
-           <text x="0" y="14" font-size="14">🦆</text>
-         </svg>`
-      )
+        encodeURIComponent(
+          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+             <text x="0" y="14" font-size="14">🦆</text>
+           </svg>`
+        )
     ),
     gutterIconSize: "contain",
     after: {
-      // This adds text after the underlined code
       color: new vscode.ThemeColor("editorWarning.foreground"),
       fontStyle: "italic",
       margin: "0 0 0 1em"
@@ -28,23 +31,41 @@ export class InlineWarnings {
 
   private changeListener?: vscode.Disposable;
 
+  /**
+   * Apply warnings to the document.
+   * @param replace If true, replaces all existing warnings (diagnostics path).
+   *                If false, appends (analyzeSelection path).
+   */
   applyWarnings(
     document: vscode.TextDocument,
-    warnings: Warning[]
+    newWarnings: Warning[],
+    replace: boolean = false
   ): void {
     const editor = vscode.window.visibleTextEditors.find(
       e => e.document.uri.toString() === document.uri.toString()
     );
     if (!editor) return;
 
-    const decorations: vscode.DecorationOptions[] = warnings.map(w => ({
+    if (replace) {
+      this.warnings = newWarnings;
+    } else {
+      this.warnings = [...this.warnings, ...newWarnings];
+    }
+
+    const decorations: vscode.DecorationOptions[] = this.warnings.map(w => ({
       range: w.range,
       hoverMessage: new vscode.MarkdownString(
-        `🦆 **DebugDuck Warning**\n\n${w.message}\n\n💡 **Suggestion:** ${w.suggestion}\n\n[Learn more](command:debugduck.showDashboard)`
+        `🦆 **DebugDuck Warning**
+
+${w.message}
+
+💡 **Suggestion:** ${w.suggestion}
+
+[Learn more](command:debugduck.showDashboard)`
       ),
       renderOptions: {
         after: {
-          contentText: ` [🦆 warning: ${w.message}]`,
+          contentText: ` 🦆 ${w.message}`,
           color: new vscode.ThemeColor("editorWarning.foreground"),
           fontStyle: "italic"
         }
@@ -53,19 +74,18 @@ export class InlineWarnings {
 
     editor.setDecorations(this.decorationType, decorations);
 
-    // Optional: Auto-clear on document change
+    // Optional document change listener
     this.changeListener?.dispose();
     this.changeListener = vscode.workspace.onDidChangeTextDocument(e => {
       if (e.document.uri.toString() === document.uri.toString()) {
-        // Optionally clear warnings after user edits
-        // Uncomment if you want auto-clear on edit:
-        // this.clearWarnings(document);
-        // this.changeListener?.dispose();
+        // You can auto-clear or recompute here later if needed
       }
     });
   }
 
   clearWarnings(document: vscode.TextDocument): void {
+    this.warnings = [];
+
     const editor = vscode.window.visibleTextEditors.find(
       e => e.document.uri.toString() === document.uri.toString()
     );
@@ -76,6 +96,7 @@ export class InlineWarnings {
   }
 
   dispose(): void {
+    this.warnings = [];
     this.changeListener?.dispose();
     this.decorationType.dispose();
   }

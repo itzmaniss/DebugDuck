@@ -59,11 +59,6 @@ export function analyzeSelection(
 
   // Clear any existing warnings for this document
   if (activeWarnings) {
-    const existingWarnings = activeWarnings.get(documentUri);
-    if (existingWarnings) {
-      existingWarnings.clearWarnings(editor.document);
-    }
-
     // Apply new warnings
     const inlineWarnings = new InlineWarnings();
     inlineWarnings.applyWarnings(editor.document, warnings);

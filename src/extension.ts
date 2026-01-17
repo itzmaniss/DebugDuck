@@ -76,8 +76,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       // Convert VS Code diagnostics to DebugDuck warnings
       const warnings: Warning[] = diagnostics
-        .filter(d => d.severity === vscode.DiagnosticSeverity.Error || 
-                     d.severity === vscode.DiagnosticSeverity.Warning)
+        .filter(d => !d.source || d.source !== "DebugDuck")
         .map(d => ({
           range: d.range,
           message: analyzeError(d.message),
@@ -86,7 +85,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       if (warnings.length > 0) {
         const inlineWarnings = new InlineWarnings();
-        inlineWarnings.applyWarnings(editor.document, warnings);
+        inlineWarnings.applyWarnings(editor.document, warnings, true);
         activeWarnings.set(documentUri, inlineWarnings);
       }
     });
