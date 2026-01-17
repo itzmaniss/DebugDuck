@@ -81,9 +81,15 @@ export function activate(context: vscode.ExtensionContext) {
         suggestion: getSuggestion(d.message)
       }));
 
-      const inlineWarnings = new InlineWarnings();
+      // Inside the diagnosticWatcher loop
+      let inlineWarnings = activeWarnings.get(documentUri);
+
+      if (!inlineWarnings) {
+          inlineWarnings = new InlineWarnings();
+          activeWarnings.set(documentUri, inlineWarnings);
+      }
+
       inlineWarnings.applyWarnings(editor.document, warnings, true);
-      activeWarnings.set(documentUri, inlineWarnings);
     });
   });
 

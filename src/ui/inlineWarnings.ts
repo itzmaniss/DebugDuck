@@ -18,11 +18,7 @@ if (saved) {
   for (const [k, v] of saved) mistakeCounter.set(k, v);
 }
 
-export class InlineWarnings {
-  private warnings: Warning[] = [];
-  private changeListener?: vscode.Disposable;
-
-  private decorationType = vscode.window.createTextEditorDecorationType({
+const duckDecorationType = vscode.window.createTextEditorDecorationType({
     gutterIconPath: vscode.Uri.parse(
       "data:image/svg+xml;charset=utf-8," +
         encodeURIComponent(
@@ -32,7 +28,13 @@ export class InlineWarnings {
         )
     ),
     gutterIconSize: "contain"
-  });
+});
+
+export class InlineWarnings {
+  private warnings: Warning[] = [];
+  private changeListener?: vscode.Disposable;
+
+  private decorationType = duckDecorationType;
 
   applyWarnings(
     document: vscode.TextDocument,

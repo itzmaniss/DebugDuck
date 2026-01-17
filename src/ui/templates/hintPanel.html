@@ -1,5 +1,6 @@
 <!DOCTYPE html> 
 <html lang="en"> 
+    <!-- TODO change the back ground color and css tailwindcss -->
     <head> 
         <meta charset="UTF-8" /> 
         <style> 
@@ -8,7 +9,7 @@
                 padding: 16px; 
                 } 
             pre { 
-                background: #f3f3f3; 
+                background: red;
                 padding: 12px; 
                 border-radius: 6px; 
                 overflow-x: auto; 
@@ -31,23 +32,41 @@
                 <button id="giveUp">🏳️ Show Solution</button> 
                 <button id="solved">✅ I Fixed It</button> 
             <script> 
-            const vscode = acquireVsCodeApi(); 
-            const data = window.__DATA__; 
-            let index = 0; 
-            document.getElementById("code").textContent = data.selectedCode; 
-            
-            function render() { 
-                const hintsEl = document.getElementById("hints"); 
-                hintsEl.innerHTML = ""; 
-                for (let i = 0; i <= index; i++) { 
-                    const p = document.createElement("p"); 
-                    p.textContent = data.hints[i].hint; 
-                    hintsEl.appendChild(p); 
+                const vscode = acquireVsCodeApi(); 
+                const data = window.__DATA__; 
+                let index = 0; 
+                document.getElementById("code").textContent = data.selectedCode; 
+                
+                function render() { 
+                    const hintsEl = document.getElementById("hints"); 
+                    hintsEl.innerHTML = ""; 
+                    for (let i = 0; i <= index; i++) { 
+                        const p = document.createElement("p"); 
+                        p.textContent = data.hints[i].hint; 
+                        hintsEl.appendChild(p); 
+                    } 
+                    document.getElementById("progress").textContent = `Hint ${index + 1} / ${data.hints.length}`; 
+                
                 } 
-                document.getElementById("progress").textContent = `Hint ${index + 1} / ${data.hints.length}`; 
-            
-            } 
-            document.getElementById("next").onclick = () => vscode.postMessage({ 
-                command: "nextHint" 
-            }); 
-            document.getElementById("giveUp").onclick = () => vscode.postMessage({ command: "giveUp" }); document.getElementById("solved").onclick = () => vscode.postMessage({ command: "solved" }); window.addEventListener("message", e => { if (e.data.command === "update") { index = e.data.hintIndex; render(); } if (e.data.command === "showSolution") { alert(e.data.solution); } }); render(); </script> </body> </html>
+                document.getElementById("next").onclick = () => vscode.postMessage({ 
+                    command: "nextHint" 
+                }); 
+                document.getElementById("giveUp").onclick = () => vscode.postMessage({ 
+                    command: "giveUp" 
+                }); 
+                document.getElementById("solved").onclick = () => vscode.postMessage({ 
+                    command: "solved" 
+                }); 
+                window.addEventListener("message", e => { 
+                    if (e.data.command === "update") { 
+                        index = e.data.hintIndex; 
+                        render();
+                    } 
+                    if (e.data.command === "showSolution") { 
+                        alert(e.data.solution); 
+                    } 
+                }); 
+                render();
+             </script> 
+        </body>
+</html>
