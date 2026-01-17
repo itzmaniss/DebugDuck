@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as fs from "fs";
 
 export type AnalysisResult = {
   selectedCode: string;
@@ -60,91 +61,22 @@ export class HintPanel {
     this.panel?.dispose();
   }
 
-  private render(): string {
-    const injectedHints = this.analysisResult?.hints ?? [];
+    private render(): string {
+    const htmlPath = vscode.Uri.joinPath(
+        vscode.Uri.file(__dirname),
+        "../../src/ui/templates/hintPanel.html"
+    );
 
-    return `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-neutral-900 text-neutral-100 p-4">
-  <div class="max-w-xl mx-auto space-y-4">
-    <div class="text-5xl">🦆</div>
-    <h2 class="text-xl font-semibold">Let's debug together</h2>
+    let html = fs.readFileSync(htmlPath.fsPath, "utf8");
 
-    <pre class="bg-neutral-800 p-3 rounded text-sm overflow-x-auto">
-${escapeHtml(this.analysisResult?.selectedCode ?? "")}
-    </pre>
+    html = html.replace(
+        "window.__DATA__",
+        JSON.stringify(this.analysisResult)
+    );
 
-    <div id="hints-list" class="space-y-2"></div>
-
-    <div class="flex gap-2">
-      <button id="next-hint" class="px-3 py-1 bg-yellow-500 text-black rounded">
-        💡 Next Hint
-      </button>
-      <button id="give-up" class="px-3 py-1 bg-red-500 rounded">
-        🏳️ Show Solution
-      </button>
-      <button id="solved" class="px-3 py-1 bg-green-500 rounded">
-        ✅ I Fixed It!
-      </button>
-    </div>
-
-    <div class="text-sm text-neutral-400 progress"></div>
-  </div>
-
-  <script>
-    const vscode = acquireVsCodeApi();
-    const hints = ${JSON.stringify(injectedHints)};
-    let index = 0;
-
-    function render() {
-      const list = document.getElementById("hints-list");
-      list.innerHTML = "";
-
-      if (hints.length === 0) {
-        list.textContent = "No hints available.";
-        return;
-      }
-
-      for (let i = 0; i <= index; i++) {
-        const p = document.createElement("p");
-        p.textContent = hints[i].hint;
-        list.appendChild(p);
-      }
-
-      document.querySelector(".progress").textContent =
-        "Hint " + (index + 1) + "/" + hints.length;
+    return html;
     }
 
-    document.getElementById("next-hint").onclick =
-      () => vscode.postMessage({ command: "nextHint" });
-
-    document.getElementById("give-up").onclick =
-      () => vscode.postMessage({ command: "giveUp" });
-
-    document.getElementById("solved").onclick =
-      () => vscode.postMessage({ command: "solved" });
-
-    window.addEventListener("message", e => {
-      if (e.data.command === "update") {
-        index = e.data.hintIndex;
-        render();
-      }
-      if (e.data.command === "showSolution") {
-        alert(e.data.solution);
-      }
-    });
-
-    render();
-  </script>
-</body>
-</html>
-`;
-  }
 }
 
 function escapeHtml(text: string): string {
