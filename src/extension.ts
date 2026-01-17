@@ -2,9 +2,7 @@ import * as vscode from "vscode";
 import { analyzeSelection, showDashboard, showSettings } from "./ui/commands";
 import { InlineWarnings, type Warning } from "./ui/inlineWarnings";
 
-// Front-end UI panels
 import { Onboarding } from "./ui/onboarding";
-import { SettingsUI } from "./ui/settingsUI";
 
 export let extensionContext: vscode.ExtensionContext;
 
