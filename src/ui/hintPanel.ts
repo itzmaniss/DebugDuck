@@ -61,37 +61,54 @@ export class HintPanel {
   }
 
   private render(): string {
-    const hints = this.analysisResult?.hints ?? [];
+    const injectedHints = this.analysisResult?.hints ?? [];
 
     return `
 <!DOCTYPE html>
-<html>
-<body>
-  <div class="duck-container">
-    <div class="duck-animation">🦆</div>
-    <h2>Let's debug together</h2>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-neutral-900 text-neutral-100 p-4">
+  <div class="max-w-xl mx-auto space-y-4">
+    <div class="text-5xl">🦆</div>
+    <h2 class="text-xl font-semibold">Let's debug together</h2>
 
-    <pre>${escapeHtml(this.analysisResult?.selectedCode ?? "")}</pre>
+    <pre class="bg-neutral-800 p-3 rounded text-sm overflow-x-auto">
+${escapeHtml(this.analysisResult?.selectedCode ?? "")}
+    </pre>
 
-    <div id="hints-list"></div>
+    <div id="hints-list" class="space-y-2"></div>
 
-    <div class="actions">
-      <button id="next-hint">💡 Next Hint</button>
-      <button id="give-up">🏳️ Show Solution</button>
-      <button id="solved">✅ I Fixed It!</button>
+    <div class="flex gap-2">
+      <button id="next-hint" class="px-3 py-1 bg-yellow-500 text-black rounded">
+        💡 Next Hint
+      </button>
+      <button id="give-up" class="px-3 py-1 bg-red-500 rounded">
+        🏳️ Show Solution
+      </button>
+      <button id="solved" class="px-3 py-1 bg-green-500 rounded">
+        ✅ I Fixed It!
+      </button>
     </div>
 
-    <div class="progress"></div>
+    <div class="text-sm text-neutral-400 progress"></div>
   </div>
 
   <script>
     const vscode = acquireVsCodeApi();
-    const hints = ${JSON.stringify(hints)};
+    const hints = ${JSON.stringify(injectedHints)};
     let index = 0;
 
     function render() {
       const list = document.getElementById("hints-list");
       list.innerHTML = "";
+
+      if (hints.length === 0) {
+        list.textContent = "No hints available.";
+        return;
+      }
 
       for (let i = 0; i <= index; i++) {
         const p = document.createElement("p");
@@ -131,5 +148,8 @@ export class HintPanel {
 }
 
 function escapeHtml(text: string): string {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
