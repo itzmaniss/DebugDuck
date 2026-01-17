@@ -50,53 +50,74 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   // --- DIAGNOSTIC WATCHER ---
-  const diagnosticWatcher = vscode.languages.onDidChangeDiagnostics(e => {
-    e.uris.forEach(uri => {
-      const diagnostics = vscode.languages.getDiagnostics(uri);
-      const editor = vscode.window.visibleTextEditors.find(
-        ed => ed.document.uri.toString() === uri.toString()
-      );
+// Inside your activate function in extension.ts
 
-      if (!editor) return;
-
-      const documentUri = uri.toString();
-
-      const existingWarnings = activeWarnings.get(documentUri);
-      if (existingWarnings) {
-        existingWarnings.clearWarnings(editor.document);
-      }
-
-      if (diagnostics.length === 0) {
-        activeWarnings.delete(documentUri);
+const diagnosticWatcher = vscode.languages.onDidChangeDiagnostics((e) => {
+    const config = vscode.workspace.getConfiguration("debugDuck");
+    const isEnabled = config.get<boolean>("realTimeWarnings", true);
+    
+    if (!isEnabled) {
+        activeWarnings.forEach((warnings, uri) => {
+            const editor = vscode.window.visibleTextEditors.find(te => te.document.uri.toString() === uri);
+            if (editor) warnings.clearWarnings(editor.document);
+        });
+        activeWarnings.clear();
         return;
-      }
+    }
 
-      const warnings: Warning[] = diagnostics.map(d => ({
-        id: crypto.randomUUID(),
-        type: "diagnostic",
-        range: d.range,
-        message: analyzeError(d.message),
-        suggestion: getSuggestion(d.message)
-      }));
+    e.uris.forEach((uri) => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || editor.document.uri.toString() !== uri.toString()) return;
 
-      // Inside the diagnosticWatcher loop
-      let inlineWarnings = activeWarnings.get(documentUri);
+        const diagnostics = vscode.languages.getDiagnostics(uri);
+        const documentUri = uri.toString();
 
-      if (!inlineWarnings) {
-          inlineWarnings = new InlineWarnings();
-          activeWarnings.set(documentUri, inlineWarnings);
-      }
+        let inlineWarnings = activeWarnings.get(documentUri);
+        if (!inlineWarnings) {
+            inlineWarnings = new InlineWarnings();
+            activeWarnings.set(documentUri, inlineWarnings);
+        }
 
-      inlineWarnings.applyWarnings(editor.document, warnings, true);
+        if (diagnostics.length === 0) {
+            inlineWarnings.clearWarnings(editor.document);
+            activeWarnings.delete(documentUri);
+            return;
+        }
+
+        const warnings: Warning[] = diagnostics.map(d => ({
+            id: crypto.randomUUID(),
+            type: "diagnostic",
+            range: d.range,
+            message: analyzeError(d.message),
+            suggestion: getSuggestion(d.message)
+        }));
+
+        inlineWarnings.applyWarnings(editor.document, warnings, true);
     });
-  });
+});
 
   context.subscriptions.push(
     analyzeCmd,
     dashboardCmd,
     settingsCmd,
     markSolvedCmd,
-    diagnosticWatcher
+    diagnosticWatcher,
+    vscode.workspace.onDidChangeConfiguration(e => {
+        if (e.affectsConfiguration("debugduck.enableRealTimeWarnings")) {
+            const isEnabled = vscode.workspace.getConfiguration("debugduck").get("enableRealTimeWarnings");
+            
+            if (!isEnabled) {
+                // If user turned it OFF, clear all current ducks immediately
+                activeWarnings.forEach((inline, uri) => {
+                    const editor = vscode.window.visibleTextEditors.find(te => te.document.uri.toString() === uri);
+                    if (editor) inline.clearWarnings(editor.document);
+                });
+                vscode.window.showInformationMessage("Real-time ducks disabled 💨");
+            } else {
+                vscode.window.showInformationMessage("Real-time ducks enabled! 🦆");
+            }
+        }
+    })
   );
 }
 

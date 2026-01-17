@@ -1,4 +1,6 @@
 import * as vscode from "vscode";
+import * as fs from "fs";
+import * as path from "path";
 
 export class SettingsUI {
   private panel?: vscode.WebviewPanel;
@@ -11,47 +13,53 @@ export class SettingsUI {
       return;
     }
 
+    // Create the Webview Panel
     this.panel = vscode.window.createWebviewPanel(
       "debugDuckSettings",
       "DebugDuck Settings 🦆",
       vscode.ViewColumn.One,
       {
-        enableScripts: true
+        enableScripts: true,
+        localResourceRoots: [
+          vscode.Uri.file(path.join(this.context.extensionPath, "src", "ui", "templates"))
+        ]
       }
     );
 
+    // Set the HTML content
     this.panel.webview.html = this.getHtml();
 
+    // Handle messages sent from the Webview (the HTML/JS side)
     this.panel.webview.onDidReceiveMessage(
-      async message => {
+      async (message) => {
+        const config = vscode.workspace.getConfiguration("debugduck");
+
         switch (message.command) {
-          case "saveSettings":
-            await vscode.workspace.getConfiguration("debugDuck").update(
-              "apiKey",
-              message.apiKey,
-              vscode.ConfigurationTarget.Global
-            );
-            await vscode.workspace.getConfiguration("debugDuck").update(
-              "maxHints",
-              message.maxHints,
-              vscode.ConfigurationTarget.Global
-            );
-            await vscode.workspace.getConfiguration("debugDuck").update(
-              "realTimeWarnings",
-              message.realTimeWarnings,
-              vscode.ConfigurationTarget.Global
-            );
-            vscode.window.showInformationMessage("DebugDuck settings saved! 🦆");
-            break;
+            // Inside your settingsUI.ts message handler
+            case "saveSettings":
+                
+                // Use Promise.all to ensure all updates finish
+                await Promise.all([
+                    config.update("apiKey", message.apiKey, vscode.ConfigurationTarget.Global),
+                    config.update("maxHints", message.maxHints, vscode.ConfigurationTarget.Global),
+                    config.update("realTimeWarnings", message.realTimeWarnings, vscode.ConfigurationTarget.Global)
+                ]);
+                
+                vscode.window.showInformationMessage("DebugDuck settings saved! 🦆");
+                break;
+
           case "resetProgress":
-            vscode.window.showWarningMessage(
+            const choice = await vscode.window.showWarningMessage(
               "Reset DebugDuck progress? This cannot be undone.",
-              "Reset", "Cancel"
-            ).then(selection => {
-              if (selection === "Reset") {
-                vscode.window.showInformationMessage("Progress Reset! 🦆");
-              }
-            });
+              "Reset",
+              "Cancel"
+            );
+            
+            if (choice === "Reset") {
+              // Clear the global state counter
+              await this.context.globalState.update("mistakeCounter", undefined);
+              vscode.window.showInformationMessage("Progress Reset! 🦆");
+            }
             break;
         }
       },
@@ -59,74 +67,42 @@ export class SettingsUI {
       this.context.subscriptions
     );
 
+    // Cleanup when panel is closed
     this.panel.onDidDispose(() => {
       this.panel = undefined;
-    });
+    }, null, this.context.subscriptions);
   }
 
+
   private getHtml(): string {
-    const config = vscode.workspace.getConfiguration("debugDuck");
-    const apiKey = config.get("apiKey", "");
-    const maxHints = config.get("maxHints", 5);
-    const realTimeWarnings = config.get("realTimeWarnings", true);
+    const config = vscode.workspace.getConfiguration("debugduck");
 
-    return `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8" />
-        <title>DebugDuck Settings 🦆</title>
-        <style>
-          body { font-family: sans-serif; padding: 1em; }
-          label { display: block; margin-top: 1em; }
-          input, button, select { margin-top: 0.5em; }
-          button { margin-right: 0.5em; }
-        </style>
-      </head>
-      <body>
-        <h2>DebugDuck Settings 🦆</h2>
-        <label>API Key:
-          <input type="text" id="apiKey" value="${apiKey}" style="width: 100%">
-        </label>
+    const settingsData = {
+      apiKey: config.get("apiKey", ""),
+      maxHints: config.get("maxHints", 5),
+      realTimeWarnings: config.get("realTimeWarnings", true)
+    };
 
-        <label>Max Hints:
-          <input type="range" id="maxHints" min="1" max="10" value="${maxHints}">
-          <span id="maxHintsValue">${maxHints}</span>
-        </label>
+    const htmlPath = path.join(
+      this.context.extensionPath,
+      "src",
+      "ui",
+      "templates",
+      "settings.html"
+    );
 
-        <label>
-          <input type="checkbox" id="realTimeWarnings" ${realTimeWarnings ? "checked" : ""}>
-          Enable real-time warnings
-        </label>
+    try {
+      let html = fs.readFileSync(htmlPath, "utf8");
 
-        <div style="margin-top: 1em;">
-          <button id="saveBtn">Save Settings</button>
-          <button id="resetBtn">Reset Progress</button>
-        </div>
+      html = html.replace(
+        "const data = window.__DATA__;",
+        `const data = ${JSON.stringify(settingsData)};`
+      );
 
-        <script>
-          const vscode = acquireVsCodeApi();
-          const maxHintsInput = document.getElementById('maxHints');
-          const maxHintsValue = document.getElementById('maxHintsValue');
-          maxHintsInput.addEventListener('input', () => {
-            maxHintsValue.textContent = maxHintsInput.value;
-          });
-
-          document.getElementById('saveBtn').addEventListener('click', () => {
-            vscode.postMessage({
-              command: 'saveSettings',
-              apiKey: document.getElementById('apiKey').value,
-              maxHints: Number(maxHintsInput.value),
-              realTimeWarnings: document.getElementById('realTimeWarnings').checked
-            });
-          });
-
-          document.getElementById('resetBtn').addEventListener('click', () => {
-            vscode.postMessage({ command: 'resetProgress' });
-          });
-        </script>
-      </body>
-      </html>
-    `;
+      return html;
+    } catch (err) {
+      console.error("Failed to read settings.html", err);
+      return `<html><body><h1>Error</h1><p>Could not load settings template from ${htmlPath}</p></body></html>`;
+    }
   }
 }
