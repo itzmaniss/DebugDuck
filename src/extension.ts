@@ -3,6 +3,9 @@ import { WarningHoverProvider } from "./ui/hoverProvider";
 import { InlineWarnings, type Warning } from "./ui/inlineWarnings";
 import * as vscode from "vscode";
 
+// Store active warning instances per document
+const activeWarnings = new Map<string, InlineWarnings>();
+
 export function activate(context: vscode.ExtensionContext) {
   // Register hover provider
   context.subscriptions.push(
@@ -18,7 +21,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Commands
   const analyzeCmd = vscode.commands.registerCommand(
     "debugduck.analyze",
-    () => analyzeSelection(context)
+    () => analyzeSelection(context, activeWarnings)
   );
 
   const dashboardCmd = vscode.commands.registerCommand(
@@ -55,7 +58,21 @@ export function activate(context: vscode.ExtensionContext) {
         ed => ed.document.uri.toString() === uri.toString()
       );
 
-      if (!editor || diagnostics.length === 0) return;
+      if (!editor) return;
+
+      const documentUri = uri.toString();
+      
+      // Clear existing warnings first
+      const existingWarnings = activeWarnings.get(documentUri);
+      if (existingWarnings) {
+        existingWarnings.clearWarnings(editor.document);
+      }
+
+      // If no diagnostics, just clear and return
+      if (diagnostics.length === 0) {
+        activeWarnings.delete(documentUri);
+        return;
+      }
 
       // Convert VS Code diagnostics to DebugDuck warnings
       const warnings: Warning[] = diagnostics
@@ -70,6 +87,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (warnings.length > 0) {
         const inlineWarnings = new InlineWarnings();
         inlineWarnings.applyWarnings(editor.document, warnings);
+        activeWarnings.set(documentUri, inlineWarnings);
       }
     });
   });

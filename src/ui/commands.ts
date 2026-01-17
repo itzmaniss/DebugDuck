@@ -28,10 +28,10 @@ const mockDashboardData: DashboardData = {
   achievements: ["First Bug 🐛", "Week Streak 🔥", "Fast Learner ⚡", "Bug Hunter 🎯"]
 };
 
-// Store active warning instances per document
-const activeWarnings = new Map<string, InlineWarnings>();
-
-export function analyzeSelection(context: vscode.ExtensionContext) {
+export function analyzeSelection(
+  context: vscode.ExtensionContext,
+  activeWarnings?: Map<string, InlineWarnings>
+) {
   const editor = vscode.window.activeTextEditor;
   if (!editor || editor.selection.isEmpty) {
     vscode.window.showWarningMessage("Select some code first 🦆");
@@ -58,25 +58,34 @@ export function analyzeSelection(context: vscode.ExtensionContext) {
   ];
 
   // Clear any existing warnings for this document
-  const existingWarnings = activeWarnings.get(documentUri);
-  if (existingWarnings) {
-    existingWarnings.clearWarnings(editor.document);
-  }
-
-  // Apply new warnings
-  const inlineWarnings = new InlineWarnings();
-  inlineWarnings.applyWarnings(editor.document, warnings);
-  activeWarnings.set(documentUri, inlineWarnings);
-
-  // Show hint panel with callback to clear warnings
-  new HintPanel().show(analysis, () => {
-    // This callback runs when panel closes or user clicks "solved"
-    const warningInstance = activeWarnings.get(documentUri);
-    if (warningInstance) {
-      warningInstance.clearWarnings(editor.document);
-      activeWarnings.delete(documentUri);
+  if (activeWarnings) {
+    const existingWarnings = activeWarnings.get(documentUri);
+    if (existingWarnings) {
+      existingWarnings.clearWarnings(editor.document);
     }
-  });
+
+    // Apply new warnings
+    const inlineWarnings = new InlineWarnings();
+    inlineWarnings.applyWarnings(editor.document, warnings);
+    activeWarnings.set(documentUri, inlineWarnings);
+
+    // Show hint panel with callback to clear warnings
+    new HintPanel().show(analysis, () => {
+      // This callback runs when panel closes or user clicks "solved"
+      const warningInstance = activeWarnings.get(documentUri);
+      if (warningInstance) {
+        warningInstance.clearWarnings(editor.document);
+        activeWarnings.delete(documentUri);
+      }
+    });
+  } else {
+    // Fallback if no activeWarnings map provided
+    const inlineWarnings = new InlineWarnings();
+    inlineWarnings.applyWarnings(editor.document, warnings);
+    new HintPanel().show(analysis, () => {
+      inlineWarnings.clearWarnings(editor.document);
+    });
+  }
 }
 
 export function showDashboard(context: vscode.ExtensionContext) {
