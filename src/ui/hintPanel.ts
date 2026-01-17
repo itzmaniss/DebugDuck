@@ -6,16 +6,19 @@ export type AnalysisResult = {
   hints: { level: number; hint: string; type: string }[];
   bugType: string;
   solution?: string;
+  document?: vscode.TextDocument; // Add this to track the document
 };
 
 export class HintPanel {
   private panel?: vscode.WebviewPanel;
   private currentHintIndex = 0;
   private analysisResult?: AnalysisResult;
+  private onCloseCallback?: () => void; // Add callback for clearing warnings
 
-  show(analysisResult: AnalysisResult): void {
+  show(analysisResult: AnalysisResult, onClose?: () => void): void {
     this.analysisResult = analysisResult;
     this.currentHintIndex = 0;
+    this.onCloseCallback = onClose;
 
     this.panel = vscode.window.createWebviewPanel(
       "debugduckHints",
@@ -31,11 +34,20 @@ export class HintPanel {
       if (message.command === "giveUp") this.showSolution();
       if (message.command === "solved") this.onSolved();
     });
+
+    // Clear warnings when panel is closed
+    this.panel.onDidDispose(() => {
+      if (this.onCloseCallback) {
+        this.onCloseCallback();
+      }
+      this.panel = undefined;
+      this.analysisResult = undefined;
+      this.onCloseCallback = undefined;
+    });
   }
 
   private showNextHint(): void {
     if (!this.analysisResult) return;
-
     if (this.currentHintIndex < this.analysisResult.hints.length - 1) {
       this.currentHintIndex++;
       this.panel?.webview.postMessage({
@@ -58,25 +70,27 @@ export class HintPanel {
 
   private onSolved(): void {
     vscode.window.showInformationMessage("Nice fix. The duck nods. 🦆");
+    
+    // Clear warnings when user marks as solved
+    if (this.onCloseCallback) {
+      this.onCloseCallback();
+    }
+    
     this.panel?.dispose();
   }
 
-    private render(): string {
+  private render(): string {
     const htmlPath = vscode.Uri.joinPath(
-        vscode.Uri.file(__dirname),
-        "../../src/ui/templates/hintPanel.html"
+      vscode.Uri.file(__dirname),
+      "../../src/ui/templates/hintPanel.html"
     );
-
     let html = fs.readFileSync(htmlPath.fsPath, "utf8");
-
     html = html.replace(
-        "window.__DATA__",
-        JSON.stringify(this.analysisResult)
+      "window.__DATA__",
+      JSON.stringify(this.analysisResult)
     );
-
     return html;
-    }
-
+  }
 }
 
 function escapeHtml(text: string): string {
