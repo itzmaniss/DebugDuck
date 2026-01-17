@@ -2,7 +2,6 @@
  * DebugDuck - Shared TypeScript Types
  * 
  * This file contains all shared interfaces and types used across the extension.
- * Both Dev 1 (Backend) and Dev 2 (Frontend) will import from this file.
  */
 
 // ============================================================================
