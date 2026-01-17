@@ -40,6 +40,10 @@
         "command": "debugduck.resetProgress",
         "title": "DebugDuck: Reset Learning Progress",
         "icon": "$(trash)"
+      },
+      {
+        "command": "debugduck.showSettings",
+        "title": "DebugDuck: Show Settings"
       }
     ],
     "keybindings": [
