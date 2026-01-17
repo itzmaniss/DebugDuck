@@ -1,18 +1,28 @@
 import * as vscode from "vscode";
+import { extensionContext } from "../extension";
 
 export type Warning = {
+  id: string;
+  type: string;
   range: vscode.Range;
   message: string;
   suggestion: string;
 };
 
+// Persistent mistake counter
+const mistakeCounter = new Map<string, number>();
+
+// Restore persisted data
+const saved = extensionContext?.globalState.get<[string, number][]>("mistakeCounter");
+if (saved) {
+  for (const [k, v] of saved) mistakeCounter.set(k, v);
+}
+
 export class InlineWarnings {
-  // Store all active warnings for this document
   private warnings: Warning[] = [];
+  private changeListener?: vscode.Disposable;
 
   private decorationType = vscode.window.createTextEditorDecorationType({
-    // No underline here.
-    // VS Code owns the red squiggle.
     gutterIconPath: vscode.Uri.parse(
       "data:image/svg+xml;charset=utf-8," +
         encodeURIComponent(
@@ -21,21 +31,9 @@ export class InlineWarnings {
            </svg>`
         )
     ),
-    gutterIconSize: "contain",
-    after: {
-      color: new vscode.ThemeColor("editorWarning.foreground"),
-      fontStyle: "italic",
-      margin: "0 0 0 1em"
-    }
+    gutterIconSize: "contain"
   });
 
-  private changeListener?: vscode.Disposable;
-
-  /**
-   * Apply warnings to the document.
-   * @param replace If true, replaces all existing warnings (diagnostics path).
-   *                If false, appends (analyzeSelection path).
-   */
   applyWarnings(
     document: vscode.TextDocument,
     newWarnings: Warning[],
@@ -46,39 +44,57 @@ export class InlineWarnings {
     );
     if (!editor) return;
 
-    if (replace) {
-      this.warnings = newWarnings;
-    } else {
-      this.warnings = [...this.warnings, ...newWarnings];
+    if (replace) this.warnings = newWarnings;
+    else this.warnings = [...this.warnings, ...newWarnings];
+
+    for (const w of newWarnings) {
+      mistakeCounter.set(w.type, (mistakeCounter.get(w.type) ?? 0) + 1);
     }
 
-    const decorations: vscode.DecorationOptions[] = this.warnings.map(w => ({
-      range: w.range,
-      hoverMessage: new vscode.MarkdownString(
-        `🦆 **DebugDuck Warning**
+    extensionContext?.globalState.update(
+      "mistakeCounter",
+      Array.from(mistakeCounter.entries())
+    );
 
-${w.message}
+    const decorations: vscode.DecorationOptions[] = this.warnings.map(w => {
+      const count = mistakeCounter.get(w.type) ?? 1;
+
+      const hover = new vscode.MarkdownString(
+`### 🦆 DebugDuck Warning
+
+**Issue:** ${w.message}
+
+⚠️ You've made this mistake **${count} time${count > 1 ? "s" : ""}**
 
 💡 **Suggestion:** ${w.suggestion}
 
-[Learn more](command:debugduck.showDashboard)`
-      ),
-      renderOptions: {
-        after: {
-          contentText: ` 🦆 ${w.message}`,
-          color: new vscode.ThemeColor("editorWarning.foreground"),
-          fontStyle: "italic"
+---
+
+▶️ [Mark as solved](command:debugduck.markSolved)
+📊 [Open Dashboard](command:debugduck.showDashboard)
+`,
+        true
+      );
+
+      return {
+        range: w.range,
+        hoverMessage: hover,
+        renderOptions: {
+          after: {
+            contentText: ` 🦆 ${w.message}`,
+            fontStyle: "italic",
+            color: new vscode.ThemeColor("editorWarning.foreground")
+          }
         }
-      }
-    }));
+      };
+    });
 
     editor.setDecorations(this.decorationType, decorations);
 
-    // Optional document change listener
     this.changeListener?.dispose();
     this.changeListener = vscode.workspace.onDidChangeTextDocument(e => {
       if (e.document.uri.toString() === document.uri.toString()) {
-        // You can auto-clear or recompute here later if needed
+        this.clearWarnings(document);
       }
     });
   }
