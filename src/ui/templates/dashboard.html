@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        :root {
+            color: var(--vscode-editor-foreground);
+            background: var(--vscode-editor-background);
+        }
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 16px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .card {
+            padding: 16px;
+            border-radius: 12px;
+            background: linear-gradient(
+                135deg,
+                var(--vscode-button-background),
+                var(--vscode-editor-background)
+            );
+            border: 1px solid var(--vscode-widget-border);
+        }
+        .stat {
+            font-size: 32px;
+            font-weight: bold;
+            margin-top: 8px;
+        }
+        h2 {
+            margin-top: 0;
+        }
+        h3 {
+            margin: 24px 0 12px 0;
+            font-size: 16px;
+            opacity: 0.85;
+        }
+        .card h3 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+        }
+        ul {
+            padding-left: 16px;
+            list-style: none;
+        }
+        ul li {
+            padding: 8px;
+            margin: 4px 0;
+            background: var(--vscode-editor-inactiveSelectionBackground);
+            border-radius: 4px;
+        }
+        .badge {
+            display: inline-block;
+            margin: 4px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: var(--vscode-badge-background);
+            color: var(--vscode-badge-foreground);
+            font-size: 14px;
+            font-weight: 500;
+        }
+        canvas {
+            width: 100%;
+            height: 120px;
+            background: var(--vscode-editor-inactiveSelectionBackground);
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <h2>🦆 DebugDuck Dashboard</h2>
+    
+    <div class="grid">
+        <div class="card">
+            <h3>Bugs Fixed</h3>
+            <div id="totalBugs" class="stat">0</div>
+        </div>
+        <div class="card">
+            <h3>Solve Rate</h3>
+            <div id="solveRate" class="stat">0%</div>
+        </div>
+        <div class="card">
+            <h3>Streak</h3>
+            <div id="streak" class="stat">0 days</div>
+        </div>
+    </div>
+    
+    <h3>Top Bug Patterns</h3>
+    <canvas id="patternsChart"></canvas>
+    
+    <h3>Recent Sessions</h3>
+    <ul id="sessions"></ul>
+    
+    <h3>Achievements</h3>
+    <div id="achievements"></div>
+
+    <script>
+        const vscode = acquireVsCodeApi();
+
+        // Animate counter values
+        function animateValue(el, value, suffix = "") {
+            let start = 0;
+            const duration = 600;
+            const startTime = performance.now();
+            
+            function tick(now) {
+                const progress = Math.min((now - startTime) / duration, 1);
+                const current = Math.floor(progress * value);
+                el.textContent = current + suffix;
+                if (progress < 1) requestAnimationFrame(tick);
+            }
+            requestAnimationFrame(tick);
+        }
+
+        // Draw bar chart on canvas
+        function drawBarChart(canvas, data) {
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return;
+            
+            const width = canvas.width = canvas.offsetWidth * 2;
+            const height = canvas.height = 240;
+            
+            ctx.clearRect(0, 0, width, height);
+            
+            const max = Math.max(...data.map(d => d.value), 1);
+            const barWidth = width / data.length;
+            const barColor = getComputedStyle(document.body)
+                .getPropertyValue("--vscode-button-background") || "#007acc";
+            
+            data.forEach((d, i) => {
+                const barHeight = (d.value / max) * (height - 48);
+                ctx.fillStyle = barColor;
+                ctx.fillRect(
+                    i * barWidth + 16,
+                    height - barHeight - 32,
+                    barWidth - 32,
+                    barHeight
+                );
+                
+                // Draw label
+                ctx.fillStyle = "#888";
+                ctx.font = "20px sans-serif";
+                ctx.fillText(d.label, i * barWidth + 16, height - 8);
+            });
+        }
+
+        // Render bug patterns chart
+        function renderPatterns(patterns) {
+            const canvas = document.getElementById("patternsChart");
+            if (!canvas) return;
+            drawBarChart(
+                canvas,
+                patterns.map(p => ({ label: p.type, value: p.count }))
+            );
+        }
+
+        // Render recent sessions list
+        function renderSessions(sessions) {
+            const ul = document.getElementById("sessions");
+            ul.innerHTML = "";
+            sessions.slice(0, 5).forEach(s => {
+                const li = document.createElement("li");
+                li.textContent = `${s.date} — ${s.bugType} — ${s.solved ? "✓ Solved" : "✗ Unsolved"}`;
+                ul.appendChild(li);
+            });
+        }
+
+        // Render achievement badges
+        function renderAchievements(badges) {
+            const el = document.getElementById("achievements");
+            el.innerHTML = "";
+            badges.forEach(b => {
+                const span = document.createElement("span");
+                span.className = "badge";
+                span.textContent = b;
+                el.appendChild(span);
+            });
+        }
+
+        // Listen for data updates from extension
+        window.addEventListener("message", event => {
+            if (event.data.command !== "updateStats") return;
+            const d = event.data.data;
+            
+            animateValue(document.getElementById("totalBugs"), d.totalBugs);
+            animateValue(document.getElementById("streak"), d.streak, " days");
+            animateValue(
+                document.getElementById("solveRate"),
+                Math.round(d.solveRate * 100),
+                "%"
+            );
+            
+            renderPatterns(d.topPatterns);
+            renderSessions(d.recentSessions);
+            renderAchievements(d.achievements);
+        });
+    </script>
+</body>
+</html>
