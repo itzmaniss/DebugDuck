@@ -1,0 +1,110 @@
+{
+  "name": "debugduck",
+  "displayName": "DebugDuck",
+  "description": "AI that teaches you to debug through progressive hints",
+  "version": "0.1.0",
+  "publisher": "itzmaniss",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/itzmaniss/debugduck"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Education",
+    "Debuggers",
+    "Machine Learning"
+  ],
+  "activationEvents": [
+    "onCommand:debugduck.analyze",
+    "onCommand:debugduck.showDashboard"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "debugduck.analyze",
+        "title": "DebugDuck: Analyze Selection",
+        "icon": "$(bug)"
+      },
+      {
+        "command": "debugduck.showDashboard",
+        "title": "DebugDuck: Show Progress Dashboard",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "debugduck.dailyReview",
+        "title": "DebugDuck: Daily Review",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "debugduck.resetProgress",
+        "title": "DebugDuck: Reset Learning Progress",
+        "icon": "$(trash)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "debugduck.analyze",
+        "key": "ctrl+shift+d",
+        "mac": "cmd+shift+d",
+        "when": "editorHasSelection"
+      }
+    ],
+    "configuration": {
+      "title": "DebugDuck",
+      "properties": {
+        "debugduck.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Anthropic API Key for Claude",
+          "order": 1
+        },
+        "debugduck.maxHints": {
+          "type": "number",
+          "default": 4,
+          "description": "Maximum number of hints before showing solution",
+          "minimum": 2,
+          "maximum": 6,
+          "order": 2
+        },
+        "debugduck.enableRealTimeWarnings": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable real-time bug warnings while typing",
+          "order": 3
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "bun run compile",
+    "compile": "bun build ./src/extension.ts --outdir ./out --target node --format esm",
+    "watch": "bun build ./src/extension.ts --outdir ./out --target node --format esm --watch",
+    "pretest": "bun run compile && bun run lint",
+    "lint": "eslint src --ext ts",
+    "test": "bun test",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "@vscode/test-cli": "^0.0.4",
+    "@vscode/test-electron": "^2.3.8",
+    "@vscode/vsce": "^2.22.0",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.0"
+  },
+  "trustedDependencies": [
+    "@vscode/vsce-sign",
+    "keytar"
+  ]
+}
