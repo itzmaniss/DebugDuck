@@ -26,7 +26,9 @@ import { ProgressiveHintSystem } from "../learningEngine/hintSystem";
 import { PatternTracker } from "../learningEngine/patternTracker";
 import { PreventionEngine } from "../learningEngine/preventionEngine";
 import { FileStorageAdapter } from "../storage/fileStorage";
-import { LocalDB } from "../storage/localDB";
+// NOTE: LocalDB uses bun:sqlite which is not available in VS Code's Node.js runtime
+// Keeping the file for future use when VS Code supports it or for CLI tools
+// import { LocalDB } from "../storage/localDB";
 
 // =============================================================================
 // Types
@@ -117,7 +119,6 @@ export class DebugDuckEngine {
   private patternTracker: PatternTracker;
   private preventionEngine: PreventionEngine;
   private storage: FileStorageAdapter;
-  private db: LocalDB | null = null;
   private userId: string;
   private config: EngineConfig;
   private profile: LearningProfile;
@@ -126,35 +127,26 @@ export class DebugDuckEngine {
     this.config = config;
     this.userId = config.userId ?? "default-user";
     const baseDir = config.baseDir ?? ".debugduck";
-    const storageType = config.storageType ?? "json";
 
-    // Initialize storage based on type
+    // Initialize JSON file storage (SQLite not available in VS Code Node.js runtime)
     this.storage = new FileStorageAdapter({ baseDir });
 
-    if (storageType === "sqlite") {
-      // SQLite mode - use LocalDB for everything
-      const dbPath =
-        baseDir === ":memory:" ? ":memory:" : `${baseDir}/debugduck.db`;
-      this.db = new LocalDB({ dbPath });
-      this.profile = this.db.getOrCreateProfile(this.userId);
-    } else {
-      // JSON mode (default) - profile loaded async, start with empty
-      this.profile = {
-        userId: this.userId,
-        totalBugs: 0,
-        bugsSolved: 0,
-        bugsGaveUp: 0,
-        averageHintsPerBug: 0,
-        patterns: new Map(),
-        strengths: [],
-        weaknesses: [],
-        streak: 0,
-        lastActive: new Date(),
-        createdAt: new Date(),
-      };
-      // Load profile asynchronously
-      this.loadProfile();
-    }
+    // JSON mode - profile loaded async, start with empty
+    this.profile = {
+      userId: this.userId,
+      totalBugs: 0,
+      bugsSolved: 0,
+      bugsGaveUp: 0,
+      averageHintsPerBug: 0,
+      patterns: new Map(),
+      strengths: [],
+      weaknesses: [],
+      streak: 0,
+      lastActive: new Date(),
+      createdAt: new Date(),
+    };
+    // Load profile asynchronously
+    this.loadProfile();
 
     // Initialize components
     this.hintSystem = new ProgressiveHintSystem(config.apiKey, {
@@ -213,7 +205,16 @@ export class DebugDuckEngine {
     const result = await this.hintSystem.analyzeBug(bug);
 
     // Get first hint
-    const firstHint = await this.hintSystem.getNextHint(result.sessionId);
+    const firstHintResult = await this.hintSystem.getNextHint(result.sessionId);
+
+    // Provide a default if no hint (shouldn't happen, but be safe)
+    const firstHint: HintResponse = firstHintResult ?? {
+      type: "hint",
+      content: "Let me analyze this code for you...",
+      progress: "Hint 1/4",
+      encouragement: "Take your time to think about it!",
+      isLastHint: false,
+    };
 
     return {
       sessionId: result.sessionId,
@@ -231,7 +232,21 @@ export class DebugDuckEngine {
    * @returns Next hint or solution if no more hints
    */
   async getNextHint(sessionId: string): Promise<HintResponse> {
-    return this.hintSystem.getNextHint(sessionId);
+    const hint = await this.hintSystem.getNextHint(sessionId);
+
+    // If no more hints, return a "no more hints" response
+    if (!hint) {
+      return {
+        type: "solution",
+        content:
+          "No more hints available. Try solving it or give up to see the solution.",
+        progress: "Complete",
+        encouragement: "You've seen all the hints. You can do this!",
+        isLastHint: true,
+      };
+    }
+
+    return hint;
   }
 
   /**
@@ -241,18 +256,25 @@ export class DebugDuckEngine {
    * @returns Completed session
    */
   async markSolved(sessionId: string): Promise<LearningSession> {
-    const session = await this.hintSystem.markSolved(sessionId);
+    try {
+      const session = await this.hintSystem.markSolved(sessionId);
 
-    // Record in pattern tracker
-    this.patternTracker.recordSession(session);
+      // Record in pattern tracker
+      this.patternTracker.recordSession(session);
 
-    // Save session to storage
-    await this.saveSession(session);
+      // Save session to storage (don't let storage errors block success)
+      try {
+        await this.saveSession(session);
+        await this.saveProfile();
+      } catch (storageError) {
+        console.error("DebugDuck: Storage error (non-fatal):", storageError);
+      }
 
-    // Update profile
-    await this.saveProfile();
-
-    return session;
+      return session;
+    } catch (error) {
+      console.error("DebugDuck: markSolved error:", error);
+      throw error;
+    }
   }
 
   /**
@@ -262,23 +284,30 @@ export class DebugDuckEngine {
    * @returns Solution and completed session
    */
   async giveUp(sessionId: string): Promise<GiveUpResult> {
-    const result = await this.hintSystem.giveUp(sessionId);
+    try {
+      const result = await this.hintSystem.giveUp(sessionId);
 
-    // Record in pattern tracker
-    this.patternTracker.recordSession(result.session);
+      // Record in pattern tracker
+      this.patternTracker.recordSession(result.session);
 
-    // Save session to storage
-    await this.saveSession(result.session);
+      // Save session to storage (don't let storage errors block success)
+      try {
+        await this.saveSession(result.session);
+        await this.saveProfile();
+      } catch (storageError) {
+        console.error("DebugDuck: Storage error (non-fatal):", storageError);
+      }
 
-    // Update profile
-    await this.saveProfile();
-
-    return {
-      solution: result.solution,
-      session: result.session,
-      encouragement:
-        "Don't worry! Every bug is a learning opportunity. You'll get the next one!",
-    };
+      return {
+        solution: result.solution,
+        session: result.session,
+        encouragement:
+          "Don't worry! Every bug is a learning opportunity. You'll get the next one!",
+      };
+    } catch (error) {
+      console.error("DebugDuck: giveUp error:", error);
+      throw error;
+    }
   }
 
   /**
@@ -455,14 +484,8 @@ export class DebugDuckEngine {
    * Use with caution!
    */
   async resetProgress(): Promise<void> {
-    if (this.db) {
-      this.db.deleteProfile(this.userId);
-      const newProfile = this.db.getOrCreateProfile(this.userId);
-      this.profile = newProfile;
-    } else {
-      await this.storage.deleteProfile();
-      this.profile = await this.storage.getOrCreateProfile(this.userId);
-    }
+    await this.storage.deleteProfile();
+    this.profile = await this.storage.getOrCreateProfile(this.userId);
     this.patternTracker = new PatternTracker(this.profile);
     this.preventionEngine.setPatternTracker(this.patternTracker);
   }
@@ -478,9 +501,6 @@ export class DebugDuckEngine {
    * @returns Array of sessions
    */
   async getRecentSessions(limit: number = 10): Promise<LearningSession[]> {
-    if (this.db) {
-      return this.db.getRecentSessions(limit);
-    }
     return this.storage.getRecentSessions(limit);
   }
 
@@ -495,9 +515,6 @@ export class DebugDuckEngine {
     bugType: string,
     limit: number = 20,
   ): Promise<LearningSession[]> {
-    if (this.db) {
-      return this.db.getSessions({ bugType, limit });
-    }
     return this.storage.getSessions({ bugType, limit });
   }
 
@@ -508,9 +525,6 @@ export class DebugDuckEngine {
    * @returns Session or null
    */
   async getSession(sessionId: string): Promise<LearningSession | null> {
-    if (this.db) {
-      return this.db.getSession(sessionId);
-    }
     return this.storage.getSession(sessionId);
   }
 
@@ -520,9 +534,6 @@ export class DebugDuckEngine {
    * @returns Number of sessions
    */
   async getSessionCount(): Promise<number> {
-    if (this.db) {
-      return this.db.getSessionCount();
-    }
     return this.storage.getSessionCount();
   }
 
@@ -536,9 +547,6 @@ export class DebugDuckEngine {
    * @returns Current config
    */
   async getConfig(): Promise<Partial<DebugDuckConfig> | null> {
-    if (this.db) {
-      return this.db.getConfig();
-    }
     return this.storage.getConfig();
   }
 
@@ -548,11 +556,7 @@ export class DebugDuckEngine {
    * @param config - Config to save
    */
   async saveUserConfig(config: Partial<DebugDuckConfig>): Promise<void> {
-    if (this.db) {
-      this.db.saveConfig(config);
-    } else {
-      await this.storage.saveConfig(config);
-    }
+    await this.storage.saveConfig(config);
   }
 
   // ===========================================================================
@@ -564,9 +568,6 @@ export class DebugDuckEngine {
    */
   close(): void {
     this.preventionEngine.cancelPendingAnalysis();
-    if (this.db) {
-      this.db.close();
-    }
   }
 
   // ===========================================================================
@@ -577,11 +578,7 @@ export class DebugDuckEngine {
    * Save a session to storage.
    */
   private async saveSession(session: LearningSession): Promise<void> {
-    if (this.db) {
-      this.db.saveSession(session);
-    } else {
-      await this.storage.saveSession(session);
-    }
+    await this.storage.saveSession(session);
   }
 
   /**
@@ -589,11 +586,7 @@ export class DebugDuckEngine {
    */
   private async saveProfile(): Promise<void> {
     const profile = this.patternTracker.getProfile();
-    if (this.db) {
-      this.db.saveProfile(profile);
-    } else {
-      await this.storage.saveProfile(profile);
-    }
+    await this.storage.saveProfile(profile);
   }
 
   /**
@@ -608,18 +601,10 @@ export class DebugDuckEngine {
     const now = new Date();
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    let sessions: LearningSession[];
-    if (this.db) {
-      sessions = this.db.getSessions({
-        startDate: weekAgo,
-        endDate: now,
-      });
-    } else {
-      sessions = await this.storage.getSessions({
-        startDate: weekAgo,
-        endDate: now,
-      });
-    }
+    const sessions = await this.storage.getSessions({
+      startDate: weekAgo,
+      endDate: now,
+    });
 
     // Group by day of week
     const byDay = new Map<number, LearningSession[]>();

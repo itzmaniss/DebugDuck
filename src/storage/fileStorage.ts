@@ -1,7 +1,8 @@
 /**
  * FileStorageAdapter - JSON File-based Storage
  *
- * Implements StorageAdapter using the filesystem with Bun.file().
+ * Implements StorageAdapter using the filesystem with Node.js fs module.
+ * Compatible with VS Code's Node.js runtime (no Bun-specific APIs).
  * Stores data as human-readable JSON files in the `.debugduck/` folder.
  *
  * File Structure:
@@ -18,15 +19,22 @@
  * @module storage/fileStorage
  */
 
-import { mkdir, readdir, unlink, exists } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
-import type { StorageAdapter } from './sessionHistory';
+import {
+  mkdir,
+  readdir,
+  unlink,
+  readFile,
+  writeFile,
+  access,
+} from "node:fs/promises";
+import { join, dirname } from "node:path";
+import type { StorageAdapter } from "./sessionHistory";
 import type {
   LearningProfile,
   LearningSession,
   BugPattern,
   DebugDuckConfig,
-} from '../types';
+} from "../types";
 
 // =============================================================================
 // Types
@@ -118,7 +126,7 @@ export class FileStorageAdapter implements StorageAdapter {
   private baseDir: string;
 
   constructor(options?: FileStorageOptions) {
-    this.baseDir = options?.baseDir ?? '.debugduck';
+    this.baseDir = options?.baseDir ?? ".debugduck";
   }
 
   // ===========================================================================
@@ -132,11 +140,8 @@ export class FileStorageAdapter implements StorageAdapter {
     const fullPath = this.resolvePath(path);
 
     try {
-      const file = Bun.file(fullPath);
-      if (!(await file.exists())) {
-        return null;
-      }
-      return await file.text();
+      const data = await readFile(fullPath, "utf-8");
+      return data;
     } catch {
       return null;
     }
@@ -153,7 +158,7 @@ export class FileStorageAdapter implements StorageAdapter {
     await mkdir(dir, { recursive: true });
 
     // Write file
-    await Bun.write(fullPath, data);
+    await writeFile(fullPath, data, "utf-8");
   }
 
   /**
@@ -163,7 +168,8 @@ export class FileStorageAdapter implements StorageAdapter {
     const fullPath = this.resolvePath(path);
 
     try {
-      return await exists(fullPath);
+      await access(fullPath);
+      return true;
     } catch {
       return false;
     }
@@ -176,7 +182,8 @@ export class FileStorageAdapter implements StorageAdapter {
     const fullPath = this.resolvePath(dir);
 
     try {
-      if (!(await exists(fullPath))) {
+      const dirExists = await this.exists(dir);
+      if (!dirExists) {
         return [];
       }
 
@@ -217,14 +224,14 @@ export class FileStorageAdapter implements StorageAdapter {
    */
   async saveProfile(profile: LearningProfile): Promise<void> {
     const serialized = this.serializeProfile(profile);
-    await this.write('profile.json', JSON.stringify(serialized, null, 2));
+    await this.write("profile.json", JSON.stringify(serialized, null, 2));
   }
 
   /**
    * Load user profile from profile.json.
    */
   async getProfile(): Promise<LearningProfile | null> {
-    const data = await this.read('profile.json');
+    const data = await this.read("profile.json");
     if (!data) return null;
 
     try {
@@ -264,7 +271,7 @@ export class FileStorageAdapter implements StorageAdapter {
    * Delete user profile.
    */
   async deleteProfile(): Promise<void> {
-    await this.delete('profile.json');
+    await this.delete("profile.json");
   }
 
   // ===========================================================================
@@ -331,7 +338,7 @@ export class FileStorageAdapter implements StorageAdapter {
   }): Promise<LearningSession[]> {
     const dateKeys = await this.getDateKeysInRange(
       options?.startDate,
-      options?.endDate
+      options?.endDate,
     );
 
     let allSessions: LearningSession[] = [];
@@ -353,7 +360,7 @@ export class FileStorageAdapter implements StorageAdapter {
     // Sort by timestamp descending
     allSessions.sort(
       (a, b) =>
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
     );
 
     // Apply pagination
@@ -389,7 +396,7 @@ export class FileStorageAdapter implements StorageAdapter {
           const serialized = sessions.map((s) => this.serializeSession(s));
           await this.write(
             `sessions/${dateKey}.json`,
-            JSON.stringify(serialized, null, 2)
+            JSON.stringify(serialized, null, 2),
           );
         }
 
@@ -423,14 +430,14 @@ export class FileStorageAdapter implements StorageAdapter {
    * Save configuration.
    */
   async saveConfig(config: Partial<DebugDuckConfig>): Promise<void> {
-    await this.write('config.json', JSON.stringify(config, null, 2));
+    await this.write("config.json", JSON.stringify(config, null, 2));
   }
 
   /**
    * Load configuration.
    */
   async getConfig(): Promise<Partial<DebugDuckConfig> | null> {
-    const data = await this.read('config.json');
+    const data = await this.read("config.json");
     if (!data) return null;
 
     try {
@@ -459,14 +466,16 @@ export class FileStorageAdapter implements StorageAdapter {
    * Get date key from timestamp.
    */
   private getDateKey(date: Date | string): string {
-    const d = typeof date === 'string' ? new Date(date) : date;
-    return d.toISOString().split('T')[0];
+    const d = typeof date === "string" ? new Date(date) : date;
+    return d.toISOString().split("T")[0]!;
   }
 
   /**
    * Load sessions for a specific date.
    */
-  private async loadSessionsForDate(dateKey: string): Promise<LearningSession[]> {
+  private async loadSessionsForDate(
+    dateKey: string,
+  ): Promise<LearningSession[]> {
     const data = await this.read(`sessions/${dateKey}.json`);
     if (!data) return [];
 
@@ -482,11 +491,11 @@ export class FileStorageAdapter implements StorageAdapter {
    * Get all date keys with stored sessions.
    */
   private async getAllDateKeys(): Promise<string[]> {
-    const files = await this.list('sessions');
+    const files = await this.list("sessions");
 
     return files
-      .filter((f) => f.endsWith('.json'))
-      .map((f) => f.replace('.json', ''))
+      .filter((f) => f.endsWith(".json"))
+      .map((f) => f.replace(".json", ""))
       .sort()
       .reverse();
   }
@@ -496,7 +505,7 @@ export class FileStorageAdapter implements StorageAdapter {
    */
   private async getDateKeysInRange(
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
   ): Promise<string[]> {
     const allKeys = await this.getAllDateKeys();
 
@@ -504,8 +513,8 @@ export class FileStorageAdapter implements StorageAdapter {
       return allKeys;
     }
 
-    const startKey = startDate ? this.getDateKey(startDate) : '0000-00-00';
-    const endKey = endDate ? this.getDateKey(endDate) : '9999-12-31';
+    const startKey = startDate ? this.getDateKey(startDate) : "0000-00-00";
+    const endKey = endDate ? this.getDateKey(endDate) : "9999-12-31";
 
     return allKeys.filter((key) => key >= startKey && key <= endKey);
   }
@@ -596,7 +605,7 @@ export class FileStorageAdapter implements StorageAdapter {
       id: data.id,
       bug: data.bug,
       bugType: data.bugType,
-      hintsGiven: data.hintsGiven as LearningSession['hintsGiven'],
+      hintsGiven: data.hintsGiven as LearningSession["hintsGiven"],
       solved: data.solved,
       gaveUp: data.gaveUp,
       hintsNeeded: data.hintsNeeded,
@@ -620,8 +629,8 @@ export class FileStorageAdapter implements StorageAdapter {
    * Clear all stored data.
    */
   async clearAll(): Promise<void> {
-    await this.delete('profile.json');
-    await this.delete('config.json');
+    await this.delete("profile.json");
+    await this.delete("config.json");
 
     const dateKeys = await this.getAllDateKeys();
     for (const dateKey of dateKeys) {

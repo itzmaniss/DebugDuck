@@ -94,7 +94,7 @@
   "devDependencies": {
     "@types/bun": "latest",
     "@types/node": "^20.x",
-    "@types/vscode": "^1.108.1",
+    "@types/vscode": "^1.85.1",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
     "@vscode/test-cli": "^0.0.4",

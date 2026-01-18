@@ -191,6 +191,6 @@ MIT
 
 ## Acknowledgments
 
-- Built with [Claude](https://anthropic.com) by Anthropic
+- Built with the help of [Claude](https://anthropic.com) by Anthropic
 - Inspired by the Socratic teaching method
 - Spaced repetition based on the SM-2 algorithm
