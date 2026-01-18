@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg: var(--vscode-editor-background);
+            --fg: var(--vscode-editor-foreground);
+            --border: var(--vscode-widget-border);
+            --input-bg: var(--vscode-input-background);
+            --accent: var(--vscode-button-background);
+        }
+        body { background-color: var(--bg); color: var(--fg); }
+    </style>
+</head>
+<body class="p-6 font-sans">
+    <div class="max-w-md mx-auto space-y-6">
+        <header class="flex items-center gap-3 border-b border-[var(--border)] pb-4">
+            <span class="text-3xl">🦆</span>
+            <h2 class="text-xl font-bold tracking-tight">Settings</h2>
+        </header>
+
+        <div class="space-y-2">
+            <label class="text-xs font-bold uppercase opacity-60 tracking-widest">API Key</label>
+            <input type="password" id="apiKey" class="w-full p-2 rounded bg-[var(--input-bg)] border border-[var(--border)] outline-none focus:border-[var(--accent)]" placeholder="Paste your key here...">
+        </div>
+
+        <div class="space-y-2">
+            <div class="flex justify-between items-center">
+                <label class="text-xs font-bold uppercase opacity-60 tracking-widest">Max Hints per Bug</label>
+                <span id="maxHintsValue" class="text-[var(--fg)] font-bold">5</span>
+            </div>
+            <input type="range" id="maxHints" min="1" max="10" class="w-full accent-[var(--accent)]">
+        </div>
+
+        <label class="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" id="realTimeWarnings" class="w-4 h-4 accent-[var(--accent)]">
+            <span class="text-sm font-medium">
+                Enable real-time 🦆 warnings
+            </span>
+        </label>
+
+
+        <div class="flex gap-3 pt-4 border-t border-[var(--border)]">
+            <button id="saveBtn" class="flex-1 bg-[var(--accent)] hover:opacity-90 text-white font-bold py-2 px-4 rounded transition-all">
+                Save Settings
+            </button>
+            <button id="resetBtn" class="px-4 py-2 border border-red-500/50 text-red-400 hover:bg-red-500/10 rounded text-sm transition-all">
+                Reset Progress
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const vscode = acquireVsCodeApi();
+        const data = window.__DATA__;
+
+        const apiKeyInput = document.getElementById('apiKey');
+        const maxHintsInput = document.getElementById('maxHints');
+        const maxHintsValue = document.getElementById('maxHintsValue');
+        const warningsCheckbox = document.getElementById('realTimeWarnings');
+
+        apiKeyInput.value = data.apiKey || '';
+        maxHintsInput.value = data.maxHints || 4;
+        maxHintsValue.textContent = data.maxHints || 4;
+        warningsCheckbox.checked = data.enableRealTimeWarnings;
+
+        maxHintsInput.addEventListener('input', () => {
+            maxHintsValue.textContent = maxHintsInput.value;
+        });
+
+        // 3. Save logic (matching package.json keys)
+        document.getElementById('saveBtn').addEventListener('click', () => {
+            vscode.postMessage({
+                command: 'saveSettings',
+                apiKey: apiKeyInput.value,
+                maxHints: Number(maxHintsInput.value),
+                enableRealTimeWarnings: warningsCheckbox.checked
+            });
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            vscode.postMessage({ command: 'resetProgress' });
+        });
+    </script>
+</body>
+</html>

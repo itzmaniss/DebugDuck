@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style type="text/tailwindcss">
+        @layer base {
+            body {
+                @apply font-sans p-4 antialiased;
+                /* Use VS Code theme colors for background and text */
+                background-color: var(--vscode-editor-background);
+                color: var(--vscode-editor-foreground);
+            }
+        }
+        /* Custom mapping for VS Code button styles to Tailwind */
+        .btn-vscode {
+            @apply mr-2 mb-2 px-4 py-2 rounded transition-colors duration-200;
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+        }
+        .btn-vscode:hover {
+            background-color: var(--vscode-button-hoverBackground);
+        }
+        .btn-secondary {
+            @apply mr-2 mb-2 px-4 py-2 rounded border border-[var(--vscode-button-background)] transition-colors;
+            color: var(--vscode-button-background);
+        }
+    </style>
+</head>
+<body>
+    <div class="flex flex-col gap-4">
+        <div class="text-4xl" aria-hidden="true">🦆</div>
+        
+        <h2 class="text-xl font-bold border-b border-[var(--vscode-widget-border)] pb-2">
+            Let’s debug together
+        </h2>
+
+        <pre id="code" class="bg-red-600 text-white p-4 rounded-lg overflow-x-auto shadow-inner font-mono text-sm leading-relaxed"></pre>
+
+        <div id="hints" class="space-y-3 bg-[var(--vscode-editorWidget-background)] p-3 rounded border border-[var(--vscode-widget-border)] italic text-sm">
+            </div>
+
+        <p id="progress" class="text-xs opacity-70 font-medium uppercase tracking-wider mt-2"></p>
+
+        <div class="flex flex-wrap mt-2">
+            <button id="next" class="btn-vscode flex items-center gap-2">
+                <span>💡</span> Next Hint
+            </button>
+            <button id="giveUp" class="btn-secondary">
+                🏳️ Show Solution
+            </button>
+            <button id="solved" class="btn-vscode bg-green-600 hover:bg-green-700 !text-white">
+                ✅ I Fixed It
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const vscode = acquireVsCodeApi();
+        const data = window.__DATA__; // Injected by hintPanel.ts
+        let index = 0;
+        
+        document.getElementById("code").textContent = data.selectedCode;
+
+        function render() {
+            const hintsEl = document.getElementById("hints");
+            hintsEl.innerHTML = "";
+            for (let i = 0; i <= index; i++) {
+                const p = document.createElement("p");
+                p.className = "flex gap-2 items-start";
+                p.innerHTML = `<span class="text-blue-400">•</span> <span>${data.hints[i].hint}</span>`;
+                hintsEl.appendChild(p);
+            }
+            document.getElementById("progress").textContent = `Hint ${index + 1} / ${data.hints.length}`;
+        }
+
+        document.getElementById("next").onclick = () => vscode.postMessage({ command: "nextHint" });
+        document.getElementById("giveUp").onclick = () => vscode.postMessage({ command: "giveUp" });
+        document.getElementById("solved").onclick = () => vscode.postMessage({ command: "solved" });
+
+        window.addEventListener("message", e => {
+            if (e.data.command === "update") {
+                index = e.data.hintIndex;
+                render();
+            }
+            if (e.data.command === "showSolution") {
+                // Consider replacing this alert with a Tailwind modal for better UX
+                alert(e.data.solution);
+            }
+        });
+
+        render();
+    </script>
+</body>
+</html>

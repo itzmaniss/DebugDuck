@@ -17,10 +17,7 @@
     "Debuggers",
     "Machine Learning"
   ],
-  "activationEvents": [
-    "onCommand:debugduck.analyze",
-    "onCommand:debugduck.showDashboard"
-  ],
+  "activationEvents": ["onStartupFinished"],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -43,6 +40,10 @@
         "command": "debugduck.resetProgress",
         "title": "DebugDuck: Reset Learning Progress",
         "icon": "$(trash)"
+      },
+      {
+        "command": "debugduck.showSettings",
+        "title": "DebugDuck: Show Settings"
       }
     ],
     "keybindings": [
@@ -81,8 +82,10 @@
   },
   "scripts": {
     "vscode:prepublish": "bun run compile",
-    "compile": "bun build ./src/extension.ts --outdir ./out --target node --format esm",
-    "watch": "bun build ./src/extension.ts --outdir ./out --target node --format esm --watch",
+    "compile": "bun run build-ts && bun run copy-templates",
+    "build-ts": "bun build ./src/extension.ts --outdir ./out --target node --format cjs --external vscode",
+    "copy-templates": "mkdir -p out/ui/templates && cp -r src/ui/templates/* out/ui/templates/",
+    "watch": "bun build ./src/extension.ts --outdir ./out --target node --format cjs --external vscode --watch",
     "pretest": "bun run compile && bun run lint",
     "lint": "eslint src --ext ts",
     "test": "bun test",
@@ -91,7 +94,7 @@
   "devDependencies": {
     "@types/bun": "latest",
     "@types/node": "^20.x",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.108.1",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
     "@vscode/test-cli": "^0.0.4",

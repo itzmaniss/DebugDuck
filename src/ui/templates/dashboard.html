@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg: var(--vscode-editor-background);
+            --fg: var(--vscode-editor-foreground);
+            --border: var(--vscode-widget-border);
+            --card-bg: var(--vscode-editor-inactiveSelectionBackground);
+            --accent: var(--vscode-button-background);
+        }
+        body {
+            background-color: var(--bg);
+            color: var(--fg);
+        }
+    </style>
+</head>
+<body class="p-6 font-sans antialiased">
+    
+    <header class="mb-8">
+        <h2 class="text-2xl font-bold flex items-center gap-3">
+            <span class="text-3xl">🦆</span> DebugDuck Dashboard
+        </h2>
+        <p class="text-sm opacity-60 mt-1">Real-time analysis of your coding habits</p>
+    </header>
+    
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
+        <div class="p-5 rounded-2xl border border-[var(--border)] bg-gradient-to-br from-[var(--accent)]/20 to-transparent shadow-sm">
+            <h3 class="text-xs font-bold uppercase tracking-wider opacity-70 mb-1">Bugs Fixed</h3>
+            <div id="totalBugs" class="text-4xl font-black tracking-tight text-[var(--accent)]">0</div>
+        </div>
+        
+        <div class="p-5 rounded-2xl border border-[var(--border)] bg-gradient-to-br from-[var(--accent)]/20 to-transparent shadow-sm">
+            <h3 class="text-xs font-bold uppercase tracking-wider opacity-70 mb-1">Solve Rate</h3>
+            <div id="solveRate" class="text-4xl font-black tracking-tight text-[var(--accent)]">0%</div>
+        </div>
+        
+        <div class="p-5 rounded-2xl border border-[var(--border)] bg-gradient-to-br from-[var(--accent)]/20 to-transparent shadow-sm">
+            <h3 class="text-xs font-bold uppercase tracking-wider opacity-70 mb-1">Current Streak</h3>
+            <div id="streak" class="text-4xl font-black tracking-tight text-[var(--accent)]">0 days</div>
+        </div>
+    </div>
+    
+    <section class="mb-10">
+        <h3 class="text-sm font-bold uppercase tracking-widest opacity-50 mb-4 flex items-center gap-2">
+            <span class="w-4 h-[2px] bg-[var(--accent)]"></span> Top Bug Patterns
+        </h3>
+        <div class="bg-[var(--card-bg)] p-4 rounded-2xl border border-[var(--border)]/50">
+            <canvas id="patternsChart" class="w-full h-40"></canvas>
+        </div>
+    </section>
+    
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <section>
+            <h3 class="text-sm font-bold uppercase tracking-widest opacity-50 mb-4">Recent Sessions</h3>
+            <ul id="sessions" class="space-y-2">
+                </ul>
+        </section>
+
+        <section>
+            <h3 class="text-sm font-bold uppercase tracking-widest opacity-50 mb-4">Achievements</h3>
+            <div id="achievements" class="flex flex-wrap gap-2">
+                </div>
+        </section>
+    </div>
+
+    <script>
+        const vscode = acquireVsCodeApi();
+
+        function animateValue(el, value, suffix = "") {
+            let start = 0;
+            const duration = 800;
+            const startTime = performance.now();
+            
+            function tick(now) {
+                const progress = Math.min((now - startTime) / duration, 1);
+                const current = Math.floor(progress * value);
+                el.textContent = current + suffix;
+                if (progress < 1) requestAnimationFrame(tick);
+            }
+            requestAnimationFrame(tick);
+        }
+
+        function drawBarChart(canvas, data) {
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return;
+            
+            // Adjust for High DPI screens
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            
+            const width = rect.width;
+            const height = rect.height;
+            
+            ctx.clearRect(0, 0, width, height);
+            
+            if (data.length === 0) return;
+
+            const max = Math.max(...data.map(d => d.value), 1);
+            const padding = 40;
+            const chartHeight = height - padding;
+            const barWidth = (width / data.length) * 0.8;
+            const spacing = (width / data.length) * 0.2;
+            
+            const barColor = getComputedStyle(document.body).getPropertyValue("--accent") || "#007acc";
+            
+            data.forEach((d, i) => {
+                const barHeight = (d.value / max) * (chartHeight - 20);
+                const x = i * (barWidth + spacing) + spacing / 2;
+                
+                // Draw Bar
+                ctx.fillStyle = barColor;
+                // Add slight transparency for modern look
+                ctx.globalAlpha = 0.8;
+                
+                // Rounded bar effect (rect)
+                ctx.beginPath();
+                ctx.roundRect(x, chartHeight - barHeight, barWidth, barHeight, [8, 8, 0, 0]);
+                ctx.fill();
+                
+                // Draw Label
+                ctx.globalAlpha = 1.0;
+                ctx.fillStyle = getComputedStyle(document.body).getPropertyValue("--fg");
+                ctx.font = "10px Inter, sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText(d.label, x + barWidth / 2, height - 10);
+                
+                // Draw Value on top
+                ctx.font = "bold 10px Inter, sans-serif";
+                ctx.fillText(d.value, x + barWidth / 2, chartHeight - barHeight - 5);
+            });
+        }
+
+        function renderSessions(sessions) {
+            const ul = document.getElementById("sessions");
+            ul.innerHTML = "";
+            sessions.slice(0, 5).forEach(s => {
+                const li = document.createElement("li");
+                li.className = "flex items-center justify-between p-3 bg-[var(--card-bg)] rounded-xl border border-white/5 text-sm transition-transform hover:scale-[1.01]";
+                li.innerHTML = `
+                    <div class="flex flex-col">
+                        <span class="font-medium text-[var(--fg)]">${s.bugType}</span>
+                        <span class="text-xs opacity-50">${s.date}</span>
+                    </div>
+                    <span class="${s.solved ? 'text-green-500' : 'text-red-400'} font-bold">
+                        ${s.solved ? '✓' : '✗'}
+                    </span>
+                `;
+                ul.appendChild(li);
+            });
+        }
+
+        function renderAchievements(badges) {
+            const el = document.getElementById("achievements");
+            el.innerHTML = "";
+            badges.forEach(b => {
+                const span = document.createElement("span");
+                span.className = "px-4 py-2 rounded-full bg-[var(--accent)] text-white text-xs font-bold shadow-lg shadow-[var(--accent)]/20 border border-white/10";
+                span.textContent = `🏆 ${b}`;
+                el.appendChild(span);
+            });
+        }
+
+        window.addEventListener("message", event => {
+            if (event.data.command !== "updateStats") return;
+            const d = event.data.data;
+            
+            animateValue(document.getElementById("totalBugs"), d.totalBugs);
+            animateValue(document.getElementById("streak"), d.streak, " days");
+            animateValue(document.getElementById("solveRate"), Math.round(d.solveRate * 100), "%");
+            
+            drawBarChart(document.getElementById("patternsChart"), d.topPatterns.map(p => ({ label: p.type, value: p.count })));
+            renderSessions(d.recentSessions);
+            renderAchievements(d.achievements);
+        });
+    </script>
+</body>
+</html>
